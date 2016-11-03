@@ -10,7 +10,7 @@ var margin = {
     bottom: 20,
     left: 120
   },
-  width = 960 - margin.right - margin.left,
+  width = 1500 - margin.right - margin.left,
   height = 500 - margin.top - margin.bottom;
 
 var i = 0,
@@ -77,12 +77,38 @@ var mapRelatedArtists = function (node, parentArtist, artists) {
   })
 }
 
+
+var getArtistPreviewTrack = function (artistId) {
+  return $.ajax({
+        url: 'https://api.spotify.com/v1/artists/' + artistId + '/top-tracks',
+        data: {
+            country: 'US'
+        }
+    });
+}
+
+var playArtist = function (artist) {
+  getArtistPreviewTrack(artist.id)
+  .then (function(response){
+    var audio = new Audio(response.tracks[0].preview_url);
+    audio.id = artist.id;
+    document.body.appendChild(audio);
+    if (artist.trackPlayed == true){
+      document.getElementById(artist.id).pause();
+      artist.trackPlayed = false;
+    }else{
+      document.getElementById(artist.id).play()
+      artist.trackPlayed = true;
+    }
+  })
+}
+
+
 //Fetch initial artist
 var searchArtists = function (query) {
 
     getArtist(query)
     .then(function(response) {
-      console.log('response:: ', response);
       var firstArtist = response.artists.items[0]
       artistTree = {
         id: firstArtist.id,
@@ -92,7 +118,6 @@ var searchArtists = function (query) {
         uri: firstArtist.uri,
         children: []
       }
-      console.log('initial artistTree:: ', artistTree);
       return artistTree;
     })
     .then(function(artist) {
@@ -104,7 +129,7 @@ var searchArtists = function (query) {
           mapRelatedArtists(artistTree, artist, response.artists);
 
           generateDiagram([artistTree])
-          console.log('artistTree:: ', artistTree);
+
         });
     })
 };
@@ -119,7 +144,7 @@ function generateDiagram(treeData) {
 
   update(root);
 
-  d3.select(self.frameElement).style("height", "500px");
+  d3.select(self.frameElement).style("height", "800px");
 
 }
 
@@ -140,14 +165,6 @@ function update(source) {
       return d.id || (d.id = ++i);
     });
 
-  node.append('image')
-    .attr('xlink:href', function(d) {
-      return d.image.url
-    })
-    .attr('x', '-12px')
-    .attr('y', '-12px')
-    .attr('width', '40px')
-    .attr('height', '40px')
 
   dblclick_timer = false;
   // Enter any new nodes at the parent's previous position.
@@ -162,8 +179,8 @@ function update(source) {
       {
           clearTimeout(dblclick_timer);
           dblclick_timer = false;
-          // double click code code comes here
-          console.log("double click fired");
+          playArtist(d);
+          
       }
       // otherwise, what to do after single click (double click has timed out)
       else dblclick_timer = setTimeout( function(){
@@ -185,7 +202,7 @@ function update(source) {
 
   nodeEnter.append("text")
     .attr("x", function(d) {
-      return d.children || d._children ? -20 : 35;
+      return d.children || d._children ? -20 : '40px';
     })
     .attr("dy", ".35em")
     .attr("text-anchor", function(d) {
@@ -235,6 +252,8 @@ function update(source) {
   // Enter any new links at the parent's previous position.
   link.enter().insert("path", "g")
     .attr("class", "link")
+    .attr('fill','none')
+    .attr('stroke','#ADADAD')
     .attr("d", function(d) {
       var o = {
         x: source.x0,
@@ -282,11 +301,7 @@ function click(d) {
     d.children = d._children;
     d._children = null;
 
-    if (d.children) {
-      console.log ('number of kids:: ', d.children.length);
-    }else{
-      console.log ('there are no children::: fetching:::');
-      console.log ('currentNode:: ', d);
+    if (!d.children) {
       var currentNode = d;
       getRelevantArtists(d)
       .then(function(response){
