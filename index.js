@@ -9,6 +9,22 @@ document.getElementById('search-form').addEventListener('submit', function (e) {
     searchArtists(document.getElementById('query').value);
 }, false);
 
+var artistId = '13saZpZnCDWOI9D4IJhp1f';
+var playArtist = function(artistId){
+    $.ajax({
+        url: 'https://api.spotify.com/v1/artists/' + artistId + '/top-tracks',
+        data: {
+            country: 'US'
+        },
+        success: function(response) {
+            var audioObject = new Audio(response.tracks[0].preview_url)
+            audioObject.play();
+            // audioObject.addEventListener('ended', function())
+        }
+
+    })
+}
+
 
 //Fetch initial artist
 var searchArtists = function (query) {
@@ -48,7 +64,7 @@ var fetchRelevantArtists = function(artistId, currentNode){
         url: 'https://api.spotify.com/v1/artists/'+artistId+'/related-artists',
         success: function (response) {
             var newArtists = response.artists.filter((artist)=>{return pastArtists.indexOf(artist.id) === -1})
-            newArtists.slice(0,10).forEach((artist)=>{
+            newArtists.slice(0,5).forEach((artist)=>{
                 object = {
                     id: artist.id,                    
                     children: [],
@@ -62,25 +78,31 @@ var fetchRelevantArtists = function(artistId, currentNode){
                 if (currentNode['children']) currentNode['children'].push(object)
                 else currentNode['children'] = [object]
             })
+            console.log('updated artistTree', artistTree)
             updateD3Graph(artistTree, currentNode)
         }
     });
 }
 
 
-
 //initialize tree
-
-// var drawTree = function(){
-    var canvas = d3.select('body').append('svg')
+    var canvas = d3.select('.d3container').append('svg')
         .style('overflow','scroll')
         .attr('width', 1500)
-        .attr('height', 1000)
+        .attr('height', 1500)
         .append('g')
             .attr('transform', 'translate(50,50)')
 
+
+    d3.select("svg").on("dblclick.zoom", null);
+
+    var linkG = canvas.append('g')
+
+    var nodeG = canvas.append('g')
+
     var tree = d3.layout.tree()
-        .size([400, 400])
+        .size([1000, 1000])
+        .separation(function(a,b){return a.parent == b.parent ? 1 : 2})
 
 
     var diagonal = d3.svg.diagonal()
@@ -88,52 +110,139 @@ var fetchRelevantArtists = function(artistId, currentNode){
 
     d3.select(self.frameElement).style("height", "800px");
 
-    function collapse(d){
+    function toggleAll(d) {
         if (d.children) {
-            d._children = d.children;
-            d._children.forEach(collapse)
-            d.children = null;
+          d.children.forEach(toggleAll);
+          toggle(d);
         }
     }
-// }
+
+    function toggle(d) {
+      if (d.children) {
+        d._children = d.children;
+        d.children = null;
+      } else {
+        d.children = d._children;
+        d._children = null;
+      }
+    }
+
 
 function updateD3Graph(artistTree, currentNode){
-    // drawTree();
-    console.log('in updateD3Graph')
-    // d3.selectAll("canvas").remove();
 
     var nodes = tree.nodes(artistTree);
     var links = tree.links(nodes);
-    var node = canvas.selectAll('.node')
-        .data(nodes)
-        .enter()
-        .append('g')
+
+    var node = nodeG.selectAll('.node')
+        .data(nodes, function(d){return d.id})
+
+    var dblclick_timer = false;
+
+    var nodeEnter = node.enter()
+            .append('g') //g = group
             .attr('class','node')
             .attr('id', function(d){return d.id})
             .attr('transform', function(d){return 'translate(' + d.y + ',' + d.x + ')'})
             .on('click', function(d){
-                selectNextRelevantArtist(d.id, currentNode)
-                // updateD3Graph(currentNode)
+                if (dblclick_timer){
+                    clearTimeout(dblclick_timer)
+                    dblclick_timer = false;
+                    console.log('double click fired')
+                }
+                else {
+                    dblclick_timer = setTimeout(function(){
+                        dblclick_timer = false;
+                        click(d)
+                    }, 250)
+                }
+                var click = function(d){
+                    if (d._children) {
+                    toggle(d)
+                    updateD3Graph(artistTree, currentNode)
+                    return;
+                    }
+                    if (d.children) {
+                        toggle(d)
+                        updateD3Graph(artistTree, currentNode)
+                        return;
+                    }
+                    else {
+                        selectNextRelevantArtist(d.id, currentNode)
+                    }
+                }
             })
+            // .on('mousedown', function(d){
 
-    node.append('image')
+            //     console.log('just double clicked in d3')
+            //     playArtist(d.id)
+            // })
+            // .on('hover', function(d){
+            //     console.log('just double clicked in d3')
+            //     playArtist(d.id)
+            // })
+            // .on('click', function(d){
+            //     if (d._children) {
+            //         toggle(d)
+            //         updateD3Graph(artistTree, currentNode)
+            //         return;
+            //     }
+            //     if (d.children) {
+            //         toggle(d)
+            //         updateD3Graph(artistTree, currentNode)
+            //         return;
+            //     }
+            //     else {
+            //         selectNextRelevantArtist(d.id, currentNode)
+            //     }
+            // })
+
+
+
+    node.attr('transform', function(d){return 'translate(' + d.y + ',' + d.x + ')'}) //update selection
+
+    nodeEnter.append('image')
         .attr('xlink:href', function(d){return d.data.image.url})
         .attr('x','-12px')
         .attr('y','-12px')
         .attr('width','40px')
         .attr('height','40px')
 
-    node.append('text')
+    nodeEnter.append('text')
         .text(function(d){ return d.data.name })
         .attr('x','40px')
 
-    canvas.selectAll('.link')
-        .data(links)
-        .enter()
+    var link = linkG.selectAll('.link')
+        .data(links, function(d){return d.source.id + '-' + d.target.id}) //connect existing to new (links via node id), otherwise done via index
+        
+    link.enter() //separate enter and update selections
         .append('path')
         .attr('class','link')
         .attr('fill','none')
         .attr('stroke','#ADADAD')
-        .attr('d', diagonal)
+        // .attr('d', diagonal)
+
+        link.attr('d', diagonal)
+
+    var nodeExit = node.exit()
+        .transition()
+        .attr('transform', function(d){return 'translate(' + d.y + ',' + d.x + ')'})
+        .remove()
+
+    var linkExit = link.exit()
+        .transition()
+        .attr('d', function(d){
+            var o = {x: d.source.x, y: d.source.y}
+            return diagonal({source: o, target: o})
+        })
+        .remove()
+
+    nodes.forEach((d)=>{
+        d.y = d.depth * 90
+    })
+
+    nodes.forEach((d)=>{
+        d.x0 = d.x;
+        d.y0 = d.y;
+    })
 }
 
