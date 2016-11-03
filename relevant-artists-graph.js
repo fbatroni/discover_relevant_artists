@@ -149,13 +149,29 @@ function update(source) {
     .attr('width', '40px')
     .attr('height', '40px')
 
+  dblclick_timer = false;
   // Enter any new nodes at the parent's previous position.
   var nodeEnter = node.enter().append("g")
     .attr("class", "node")
     .attr("transform", function(d) {
       return "translate(" + source.y0 + "," + source.x0 + ")";
     })
-    .on("click", click);
+    .on("click", function(d){
+      // if double click timer is active, this click is the double click
+      if ( dblclick_timer )
+      {
+          clearTimeout(dblclick_timer);
+          dblclick_timer = false;
+          // double click code code comes here
+          console.log("double click fired");
+      }
+      // otherwise, what to do after single click (double click has timed out)
+      else dblclick_timer = setTimeout( function(){
+          dblclick_timer = false
+          click(d)
+      }, 250)
+    })
+
 
 
   nodeEnter.append('image')
@@ -282,3 +298,6 @@ function click(d) {
   }
   update(d);
 }
+
+
+
